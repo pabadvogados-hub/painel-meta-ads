@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Painel de Campanha</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root{--bg:#f5f6f8;--card:#fff;--line:#e3e6eb;--txt:#1b2230;--mut:#6b7380;--acc:#2456d6;--ok:#1f8a5b;--warn:#c47a12;--bad:#c0392b;--chip:#eef1f6}
+  @media (prefers-color-scheme:dark){:root{--bg:#0f131a;--card:#171c26;--line:#262d3a;--txt:#e8ebf1;--mut:#8b94a5;--acc:#6b93ff;--ok:#43c08a;--warn:#e0a13c;--bad:#ef6a5b;--chip:#1f2633}}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:24px 16px;line-height:1.5}
+  .wrap{max-width:1100px;margin:0 auto}
+  header{display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:10px;margin-bottom:20px}
+  h1{font-size:24px;font-weight:700}
+  .sub{color:var(--mut);font-size:13px;margin-top:2px}
+  .pill{font-size:12px;font-weight:600;padding:5px 12px;border-radius:999px;background:var(--chip);color:var(--mut)}
+  .demo{background:color-mix(in srgb,var(--warn) 15%,transparent);color:var(--warn);border:1px solid var(--warn);border-radius:10px;padding:10px 14px;font-size:13px;margin-bottom:18px}
+  h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);margin:28px 0 12px;font-weight:700}
+  .grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .kpi .l{font-size:12px;color:var(--mut)}
+  .kpi .v{font-size:26px;font-weight:700;margin-top:4px;font-variant-numeric:tabular-nums}
+  .kpi .d{font-size:12px;margin-top:2px;color:var(--mut)}
+  .ok{color:var(--ok)} .bad{color:var(--bad)}
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--mut);padding:8px;border-bottom:1px solid var(--line)}
+  td{padding:9px 8px;border-bottom:1px solid var(--line)}
+  .n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .rolar{overflow-x:auto}
+  .vazio{color:var(--mut);font-style:italic;padding:14px 4px}
+  .chart{position:relative;height:240px}
+  footer{text-align:center;color:var(--mut);font-size:11.5px;margin-top:30px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1 id="titulo">Painel de Campanha</h1>
+      <div class="sub" id="sub"></div>
+    </div>
+    <span class="pill" id="alvoPill" hidden></span>
+  </header>
+
+  <div class="demo" id="aviso" hidden><b>Dados de exemplo.</b> Estes numeros sao ficticios, so para mostrar o desenho. Configure o <code>.env</code> e rode <code>python atualizar_painel.py</code> para ver a sua campanha.</div>
+
+  <div class="grid" id="kpis"></div>
+
+  <h2>Dia a dia</h2>
+  <div class="card"><div class="chart"><canvas id="grafico"></canvas></div></div>
+
+  <h2>Conjuntos de anuncios</h2>
+  <div class="card rolar" id="conjuntos"></div>
+
+  <h2>Anuncios (ranking por conversas)</h2>
+  <div class="card rolar" id="anuncios"></div>
+
+  <footer>Dados da Meta Marketing API &middot; somente leitura &middot; <span id="rodape"></span></footer>
+</div>
+
+<script>
+/*DADOS*/ const DATA = {"demo":true,"nome":"Campanha de exemplo","periodo":"last_7d","atualizado":"--","alvo":8.0,"total":{"gasto":420.0,"conversas":62,"custo":6.77,"impressoes":31200,"alcance":19800,"cliques":1180,"ctr":3.78},"conjuntos":[{"nome":"Publico A (exemplo)","gasto":210.0,"conversas":34,"custo":6.18,"impressoes":15000,"alcance":9800,"cliques":620,"ctr":4.13},{"nome":"Publico B (exemplo)","gasto":140.0,"conversas":19,"custo":7.37,"impressoes":10200,"alcance":6500,"cliques":390,"ctr":3.82},{"nome":"Publico C (exemplo)","gasto":70.0,"conversas":9,"custo":7.78,"impressoes":6000,"alcance":4200,"cliques":170,"ctr":2.83}],"anuncios":[{"nome":"Video 1 (exemplo)","gasto":180.0,"conversas":30,"custo":6.0,"impressoes":12000,"alcance":8000,"cliques":520,"ctr":4.33},{"nome":"Video 2 (exemplo)","gasto":150.0,"conversas":21,"custo":7.14,"impressoes":11000,"alcance":7000,"cliques":410,"ctr":3.73},{"nome":"Imagem 1 (exemplo)","gasto":90.0,"conversas":11,"custo":8.18,"impressoes":8200,"alcance":5500,"cliques":250,"ctr":3.05}],"serie":[{"dia":"01","gasto":58,"conversas":8},{"dia":"02","gasto":61,"conversas":10},{"dia":"03","gasto":60,"conversas":9},{"dia":"04","gasto":62,"conversas":11},{"dia":"05","gasto":59,"conversas":8},{"dia":"06","gasto":60,"conversas":9},{"dia":"07","gasto":60,"conversas":7}]}; /*FIM*/
+
+const BRL = v => 'R$ ' + (v || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+const N = v => (v || 0).toLocaleString('pt-BR');
+const PERIODOS = {today:'Hoje', yesterday:'Ontem', last_7d:'Ultimos 7 dias', last_14d:'Ultimos 14 dias', last_30d:'Ultimos 30 dias', maximum:'Todo o periodo'};
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+const t = DATA.total || {};
+document.getElementById('titulo').textContent = DATA.nome || 'Painel de Campanha';
+document.title = DATA.nome || 'Painel de Campanha';
+document.getElementById('sub').textContent = (PERIODOS[DATA.periodo] || DATA.periodo) + ' · atualizado ' + DATA.atualizado;
+document.getElementById('rodape').textContent = 'atualizado ' + DATA.atualizado;
+if (DATA.demo) document.getElementById('aviso').hidden = false;
+
+if (DATA.alvo) {
+  const p = document.getElementById('alvoPill');
+  p.hidden = false;
+  p.textContent = 'Alvo: ' + BRL(DATA.alvo) + ' por conversa';
+}
+
+const batendo = DATA.alvo && t.conversas > 0 ? t.custo <= DATA.alvo : null;
+const kpis = [
+  ['Investido', BRL(t.gasto), N(t.impressoes) + ' impressoes'],
+  ['Conversas', N(t.conversas), N(t.alcance) + ' pessoas alcancadas'],
+  ['Custo por conversa', t.conversas ? BRL(t.custo) : '—',
+     batendo === null ? '' : (batendo ? '<span class="ok">dentro do alvo</span>' : '<span class="bad">acima do alvo</span>')],
+  ['Cliques', N(t.cliques), 'CTR ' + String(t.ctr || 0).replace('.', ',') + '%']
+];
+document.getElementById('kpis').innerHTML = kpis.map(k =>
+  '<div class="card kpi"><div class="l">' + k[0] + '</div><div class="v">' + k[1] + '</div><div class="d">' + k[2] + '</div></div>').join('');
+
+function tabela(id, lista) {
+  const el = document.getElementById(id);
+  if (!lista || !lista.length) { el.innerHTML = '<div class="vazio">Sem dados no periodo.</div>'; return; }
+  el.innerHTML = '<table><thead><tr><th>Nome</th><th class="n">Gasto</th><th class="n">Conversas</th><th class="n">Custo/conv.</th><th class="n">CTR</th></tr></thead><tbody>' +
+    lista.map(x => {
+      const cor = DATA.alvo && x.conversas ? (x.custo <= DATA.alvo ? 'ok' : 'bad') : '';
+      return '<tr><td>' + esc(x.nome) + '</td><td class="n">' + BRL(x.gasto) + '</td><td class="n">' + N(x.conversas) +
+             '</td><td class="n ' + cor + '">' + (x.conversas ? BRL(x.custo) : '—') + '</td><td class="n">' + String(x.ctr || 0).replace('.', ',') + '%</td></tr>';
+    }).join('') + '</tbody></table>';
+}
+tabela('conjuntos', DATA.conjuntos);
+tabela('anuncios', DATA.anuncios);
+
+const serie = DATA.serie || [];
+if (window.Chart && serie.length) {
+  const css = getComputedStyle(document.documentElement);
+  new Chart(document.getElementById('grafico'), {
+    data: {
+      labels: serie.map(s => s.dia),
+      datasets: [
+        {type: 'bar', label: 'Conversas', data: serie.map(s => s.conversas), backgroundColor: css.getPropertyValue('--acc').trim(), yAxisID: 'y'},
+        {type: 'line', label: 'Gasto (R$)', data: serie.map(s => s.gasto), borderColor: css.getPropertyValue('--warn').trim(), tension: .3, yAxisID: 'y1'}
+      ]
+    },
+    options: {responsive: true, maintainAspectRatio: false,
+      scales: {y: {beginAtZero: true, title: {display: true, text: 'Conversas'}}, y1: {position: 'right', beginAtZero: true, grid: {drawOnChartArea: false}, title: {display: true, text: 'R$'}}}}
+  });
+}
+</script>
+</body>
+</html>
